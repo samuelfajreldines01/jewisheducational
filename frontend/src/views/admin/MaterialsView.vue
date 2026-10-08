@@ -248,7 +248,7 @@ provide('materialActions', { publishing, togglePublish, remove, limitLabel, dupl
           {{ generatingThumbs ? 'Generating thumbnails…' : 'Generate page thumbnails' }}
         </button>
         <button type="button" class="btn btn-outline-secondary" @click="showBulkImport = true">
-          <i class="bi bi-filetype-csv me-1"></i>Import CSV
+          <i class="bi bi-cloud-arrow-up me-1"></i>Bulk upload
         </button>
         <RouterLink to="/admin/materials/new" class="btn btn-primary">
           <i class="bi bi-plus-lg me-1"></i>New resource

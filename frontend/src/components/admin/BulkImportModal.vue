@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import api from '@/api';
 import { parseMaterialsCsv, buildTemplateCsv } from '@/utils/csv';
+import { titleFromFileName } from '@/utils/bulkFiles';
 
 const props = defineProps({
   // Categories (com id, name, slug) para validar a coluna "category" na
@@ -14,6 +15,8 @@ const emit = defineEmits(['close', 'imported']);
 const step = ref('select'); // select | preview | result
 const fileName = ref('');
 const rows = ref([]);
+const fileRows = ref([]);
+const folderForAll = ref('');
 const unknownHeaders = ref([]);
 const hasTitle = ref(false);
 const parseError = ref('');
@@ -97,10 +100,60 @@ async function runImport() {
   }
 }
 
+function onDocs(event) {
+  const files = [...(event.target.files || [])];
+  event.target.value = '';
+  if (!files.length) return;
+  parseError.value = '';
+  fileRows.value = files.map((file) => ({
+    file,
+    title: titleFromFileName(file.name),
+    category_id: '',
+  }));
+  folderForAll.value = '';
+  step.value = 'files';
+}
+
+function applyFolderToAll() {
+  for (const row of fileRows.value) row.category_id = folderForAll.value;
+}
+
+async function runFileImport() {
+  importing.value = true;
+  parseError.value = '';
+  const created = [];
+  const errors = [];
+  for (const row of fileRows.value) {
+    const title = row.title.trim();
+    if (!title) {
+      errors.push({ line: row.file.name, title: '', error: 'No title' });
+      continue;
+    }
+    const body = new FormData();
+    body.append('title', title);
+    body.append('is_published', 'false');
+    if (row.category_id) body.append('category_id', row.category_id);
+    body.append('files', row.file);
+    body.append('file_labels', JSON.stringify([title]));
+    try {
+      const { data } = await api.post('/resources', body);
+      created.push({ title, id: data.resource?.id });
+    } catch (e) {
+      errors.push({ line: row.file.name, title, error: e.response?.data?.error || 'Upload failed' });
+    }
+  }
+  result.value = { created, errors, total: fileRows.value.length };
+  step.value = 'result';
+  emit('imported');
+  importing.value = false;
+}
+
 function reset() {
   step.value = 'select';
   fileName.value = '';
   rows.value = [];
+  fileRows.value = [];
+  folderForAll.value = '';
   unknownHeaders.value = [];
   parseError.value = '';
   result.value = null;
@@ -113,7 +166,7 @@ function reset() {
       <div class="bulk-modal" role="dialog" aria-modal="true" aria-labelledby="bulk-title">
         <div class="bulk-header">
           <h2 id="bulk-title" class="bulk-title">
-            <i class="bi bi-filetype-csv me-2"></i>Import materials from a spreadsheet
+            <i class="bi bi-cloud-arrow-up me-2"></i>Bulk upload
           </h2>
           <button type="button" class="btn-close" aria-label="Close" @click="emit('close')"></button>
         </div>
@@ -122,21 +175,25 @@ function reset() {
           <!-- Passo 1: escolher arquivo -->
           <template v-if="step === 'select'">
             <p class="text-muted">
-              Each spreadsheet row becomes a material. Complete at least the
-              <strong>title</strong> column. To attach a presentation automatically,
-              add a publicly accessible <strong>Google Slides</strong> link in the
-              <code>google_slides</code> column. Local PDF files must still be attached
-              from the material's edit page after the import.
+              Attach one document per material and choose its folder. Or import a
+              spreadsheet. A CSV still does not carry the PDF. Add a public
+              <code>google_slides</code> link only when the file is a presentation.
             </p>
 
             <button type="button" class="btn btn-outline-secondary mb-3" @click="downloadTemplate">
               <i class="bi bi-download me-1"></i>Download CSV template
             </button>
 
+            <label class="bulk-drop mb-3">
+              <input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,application/pdf" class="d-none" multiple @change="onDocs" />
+              <i class="bi bi-paperclip fs-2 d-block mb-2"></i>
+              <span>Attach documents (PDF, DOC, PPT). One material per file.</span>
+            </label>
+
             <label class="bulk-drop">
               <input type="file" accept=".csv,text/csv" class="d-none" @change="onFile" />
               <i class="bi bi-cloud-arrow-up fs-2 d-block mb-2"></i>
-              <span>Click to choose a CSV file</span>
+              <span>Or choose a CSV file</span>
             </label>
 
             <div class="bulk-hint">
@@ -147,6 +204,44 @@ function reset() {
               <strong>drafts</strong> by default.
             </div>
 
+            <div v-if="parseError" class="alert alert-danger mt-3 mb-0">{{ parseError }}</div>
+          </template>
+
+          <template v-else-if="step === 'files'">
+            <p class="text-muted">
+              Each file becomes a draft. Set the title and the folder for that document.
+            </p>
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+              <select v-model="folderForAll" class="form-select form-select-sm" style="max-width: 240px">
+                <option value="">No folder</option>
+                <option v-for="c in categories" :key="c.id" :value="String(c.id)">{{ c.name }}</option>
+              </select>
+              <button type="button" class="btn btn-sm btn-outline-secondary" @click="applyFolderToAll">Apply folder to all</button>
+              <span class="badge bg-success">{{ fileRows.length }} file(s)</span>
+            </div>
+            <div class="bulk-table-wrap">
+              <table class="table table-sm align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Document</th>
+                    <th>Title</th>
+                    <th>Folder</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, index) in fileRows" :key="index">
+                    <td class="text-muted small">{{ row.file.name }}</td>
+                    <td><input v-model="row.title" class="form-control form-control-sm" /></td>
+                    <td>
+                      <select v-model="row.category_id" class="form-select form-select-sm">
+                        <option value="">No folder</option>
+                        <option v-for="c in categories" :key="c.id" :value="String(c.id)">{{ c.name }}</option>
+                      </select>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
             <div v-if="parseError" class="alert alert-danger mt-3 mb-0">{{ parseError }}</div>
           </template>
 
@@ -224,7 +319,19 @@ function reset() {
         </div>
 
         <div class="bulk-footer">
-          <template v-if="step === 'preview'">
+          <template v-if="step === 'files'">
+            <button type="button" class="btn btn-link text-secondary" @click="reset">Back</button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              :disabled="importing || !fileRows.length"
+              @click="runFileImport"
+            >
+              <span v-if="importing" class="spinner-border spinner-border-sm me-1"></span>
+              {{ importing ? 'Uploading…' : `Upload ${fileRows.length} document(s)` }}
+            </button>
+          </template>
+          <template v-else-if="step === 'preview'">
             <button type="button" class="btn btn-link text-secondary" @click="reset">Back</button>
             <button
               type="button"
