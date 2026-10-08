@@ -44,6 +44,7 @@ const error = ref('');
 const loading = ref(false);
 const generatingPreview = ref(false);
 const generatingCover = ref(false);
+const writingCopy = ref(false);
 const coverGenerated = ref(false);
 const pendingPublish = ref(false);
 const pageLayout = ref(structuredClone(RESOURCE_PAGE_DEFAULTS));
@@ -198,6 +199,29 @@ async function refreshGeneratedCover() {
 function onFilesChange(e) {
   files.value = Array.from(e.target.files);
   fileLabels.value = files.value.map((f) => f.name.replace(/\.[^.]+$/, ''));
+  const empty = !form.value.description && !form.value.content_description && !form.value.keywords;
+  if (empty && form.value.title.trim() && files.value.length) writeCopy();
+}
+
+async function writeCopy() {
+  const title = form.value.title.trim();
+  if (!title || writingCopy.value) return;
+  writingCopy.value = true;
+  error.value = '';
+  try {
+    const body = new FormData();
+    body.append('title', title);
+    const pdf = files.value.find((file) => /\.pdf$/i.test(file.name));
+    if (pdf) body.append('file', pdf);
+    const { data } = await api.post('/resources/admin/suggest-copy', body);
+    form.value.description = data.description || '';
+    form.value.content_description = data.content_description || '';
+    form.value.keywords = data.keywords || '';
+  } catch (e) {
+    error.value = e.response?.data?.error || 'Could not write the description.';
+  } finally {
+    writingCopy.value = false;
+  }
 }
 
 function updateFileLabel(index, value) {
@@ -414,6 +438,15 @@ async function toggleFileBundle(file) {
           <div class="form-text">
             Extra terms that help people find this resource in search, separated by commas. They are not displayed on the public page.
           </div>
+          <button
+            type="button"
+            class="btn btn-outline-secondary btn-sm mt-2"
+            :disabled="writingCopy || !form.title.trim()"
+            @click="writeCopy"
+          >
+            <span v-if="writingCopy" class="spinner-border spinner-border-sm me-1"></span>
+            {{ writingCopy ? 'Writing…' : 'Write summary, description and keywords' }}
+          </button>
         </div>
         <div class="row mb-3">
           <div class="col-md-3">

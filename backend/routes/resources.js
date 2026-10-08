@@ -9,6 +9,7 @@ import { uniqueSlug } from '../utils/helpers.js';
 import { getDescendantIds } from './categories.js';
 import { isFirestoreBackend } from '../config/database.js';
 import { generatePdfCover } from '../utils/pdfCover.js';
+import { excerptFromPdf, writeMaterialCopy } from '../utils/materialCopy.js';
 import { generateImageCover, generatePptxCover } from '../utils/pptxCover.js';
 import {
   downloadGoogleSlidesFirstSlide,
@@ -496,6 +497,25 @@ router.get('/', optionalAuth, async (req, res) => {
   });
 
   res.json({ resources, pagination: { page: pageNum, limit: limitNum, total } });
+});
+
+router.post('/admin/suggest-copy', authenticate, requireAdmin, upload.single('file'), async (req, res) => {
+  try {
+    const title = String(req.body.title || '').trim();
+    if (!title) return res.status(400).json({ error: 'Add the title first.' });
+    const apiKey = String(process.env.GEMINI_API_KEY || '').trim();
+    if (!apiKey) return res.status(503).json({ error: 'Description writing is not configured.' });
+    let excerpt = '';
+    if (req.file?.path && /\.pdf$/i.test(req.file.originalname || '')) {
+      excerpt = await excerptFromPdf(fs.readFileSync(req.file.path));
+    }
+    const copy = await writeMaterialCopy({ title, excerpt, apiKey });
+    res.json(copy);
+  } catch {
+    res.status(502).json({ error: 'Could not write the description.' });
+  } finally {
+    if (req.file?.path) fs.unlink(req.file.path, () => {});
+  }
 });
 
 router.get('/admin/all', authenticate, requireAdmin, async (req, res) => {

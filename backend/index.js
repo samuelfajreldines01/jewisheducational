@@ -7,6 +7,7 @@ process.env.DB_DRIVER = 'firestore';
 setGlobalOptions({ region: 'us-central1', maxInstances: 10 });
 
 const jwtSecret = defineSecret('JWT_SECRET');
+const geminiApiKey = defineSecret('GEMINI_API_KEY');
 const migrationSecret = defineSecret('MIGRATION_SECRET');
 const frontendUrl = defineString('FRONTEND_URL', {
   default: 'https://jewisheducationalresources.org',
@@ -18,6 +19,7 @@ const emailEnabled = defineString('EMAIL_ENABLED', { default: 'false' });
 
 const apiSecrets = [
   jwtSecret,
+  geminiApiKey,
 ];
 
 const apps = new Map();
