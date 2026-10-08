@@ -3,6 +3,7 @@ import path from 'path';
 import { query, queryOne, withTransaction as mysqlWithTransaction } from '../config/database.mysql.js';
 import { uploadDir } from '../middleware/upload.js';
 import { sourceForRow } from '../utils/attribution.js';
+import { resourceInsertParams } from './resourceInsert.js';
 
 export async function withTransaction(work) {
   return mysqlWithTransaction(work);
@@ -313,15 +314,7 @@ export async function resourceCreate(data) {
   const result = await query(
     `INSERT INTO resources (title, slug, description, content_description, age_range, keywords, action_visibility, grade_level, material_type, google_slides_url, canva_url, category_id, cover_image, cover_hidden, display_mode, download_limit_max, download_limit_period, school_only, page_layout, is_premium, is_published, is_archived, sort_order, created_by)
      VALUES (:title, :slug, :description, :content_description, :age_range, :keywords, :action_visibility, :grade_level, :material_type, :google_slides_url, :canva_url, :category_id, :cover_image, :cover_hidden, :display_mode, :download_limit_max, :download_limit_period, :school_only, :page_layout, :is_premium, :is_published, :is_archived, :sort_order, :created_by)`,
-    {
-      ...data,
-      google_slides_url: data.google_slides_url ?? null,
-      canva_url: data.canva_url ?? null,
-      is_premium: data.is_premium ? 1 : 0,
-      action_visibility: data.action_visibility == null || typeof data.action_visibility === 'string'
-        ? data.action_visibility
-        : JSON.stringify(data.action_visibility),
-    }
+    resourceInsertParams(data)
   );
   return { insertId: result.insertId };
 }
