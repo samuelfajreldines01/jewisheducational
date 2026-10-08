@@ -18,7 +18,7 @@ test('migration routes are opt-in and not mounted on the normal API', () => {
   assert.match(source, /createApp\(\{ includeMigration = false \} = \{\}\)/);
   assert.match(source, /if \(includeMigration\) app\.use\('\/api\/migrate', migrateRoutes\)/);
   assert.match(index, /const apiSecrets = \[/);
-  assert.match(index, /const apiSecrets = \[\s*jwtSecret,\s*\]/);
+  assert.match(index, /const apiSecrets = \[\s*jwtSecret,\s*geminiApiKey,\s*\]/);
   assert.match(index, /secrets: apiSecrets/);
   assert.match(index, /PAYMENTS_ENABLED/);
   assert.match(index, /EMAIL_ENABLED/);
