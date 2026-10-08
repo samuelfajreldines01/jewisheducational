@@ -9,6 +9,8 @@ import { uniqueSlug } from '../utils/helpers.js';
 import { getDescendantIds } from './categories.js';
 import { isFirestoreBackend } from '../config/database.js';
 import { generatePdfCover } from '../utils/pdfCover.js';
+import { labelFromTextItems } from '../utils/pdfPageLabel.js';
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { generateImageCover, generatePptxCover } from '../utils/pptxCover.js';
 import {
   downloadGoogleSlidesFirstSlide,
@@ -24,6 +26,32 @@ import { normalizeFileName } from '../utils/storagePaths.js';
 
 const router = Router();
 const MAX_FILES = 50;
+
+async function suggestPdfPageLabels(pdfBuffer, pageCount) {
+  // Cópia própria. O pdfjs desanexa o ArrayBuffer que recebe e isso
+  // quebrava o pdf-lib, que ainda precisa dos mesmos bytes para partir.
+  const data = new Uint8Array(pdfBuffer);
+  let doc;
+  const labels = [];
+  try {
+    doc = await pdfjs.getDocument({
+      data,
+      disableFontFace: true,
+      isEvalSupported: false,
+    }).promise;
+    const total = Math.min(pageCount, doc.numPages);
+    for (let i = 1; i <= total; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      labels.push(labelFromTextItems(content.items));
+    }
+  } catch {
+    return labels;
+  } finally {
+    await doc?.destroy().catch(() => {});
+  }
+  return labels;
+}
 
 function createResultId(result) {
   return result?.insertId ?? result?.id ?? result?.resource?.id ?? null;
@@ -1314,6 +1342,12 @@ router.post('/:id/split-file/:fileId', authenticate, requireAdmin, async (req, r
   }
 
   const baseName = file.original_name.replace(/\.pdf$/i, '');
+  let pageLabels = [];
+  try {
+    pageLabels = await suggestPdfPageLabels(buffer, pageCount);
+  } catch {
+    pageLabels = [];
+  }
   const { maxOrder } = await db.fileMaxSortOrder(req.params.id);
   let nextOrder = maxOrder + 1;
   const watermark = await getWatermarkText();
@@ -1330,6 +1364,7 @@ router.post('/:id/split-file/:fileId', authenticate, requireAdmin, async (req, r
       const [copiedPage] = await pageDoc.copyPages(srcDoc, [i]);
       pageDoc.addPage(copiedPage);
       const pageBuffer = Buffer.from(await pageDoc.save());
+      const pageLabel = pageLabels[i] || null;
 
       const newFileName = `${uuidv4()}.pdf`;
       const storagePath = `files/${newFileName}`;
@@ -1341,8 +1376,8 @@ router.post('/:id/split-file/:fileId', authenticate, requireAdmin, async (req, r
       if (thumbnailPath) createdThumbnailPaths.push(thumbnailPath);
       const created = await db.fileCreate(req.params.id, {
         file_name: newFileName,
-        original_name: `${baseName} — Page ${i + 1}.pdf`,
-        label: `Page ${i + 1}`,
+        original_name: `${baseName} — ${pageLabel || `Page ${i + 1}`}.pdf`,
+        label: pageLabel || `Page ${i + 1}`,
         sort_order: nextOrder++,
         file_type: 'pdf',
         file_size: pageBuffer.length,
