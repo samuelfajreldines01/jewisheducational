@@ -7,8 +7,8 @@ process.env.DB_DRIVER = 'firestore';
 setGlobalOptions({ region: 'us-central1', maxInstances: 10 });
 
 const jwtSecret = defineSecret('JWT_SECRET');
-const geminiApiKey = defineSecret('GEMINI_API_KEY');
 const migrationSecret = defineSecret('MIGRATION_SECRET');
+const geminiApiKey = defineString('GEMINI_API_KEY', { default: '' });
 const frontendUrl = defineString('FRONTEND_URL', {
   default: 'https://jewisheducationalresources.org',
 });
@@ -19,7 +19,6 @@ const emailEnabled = defineString('EMAIL_ENABLED', { default: 'false' });
 
 const apiSecrets = [
   jwtSecret,
-  geminiApiKey,
 ];
 
 const apps = new Map();
@@ -38,6 +37,10 @@ async function getApp({ includeMigration = false } = {}) {
     if (!process.env.FRONTEND_URL) {
       const configuredUrl = frontendUrl.value();
       if (configuredUrl) process.env.FRONTEND_URL = configuredUrl;
+    }
+    if (process.env.K_SERVICE && !process.env.GEMINI_API_KEY) {
+      const configuredGemini = geminiApiKey.value();
+      if (configuredGemini) process.env.GEMINI_API_KEY = configuredGemini;
     }
     if (process.env.K_SERVICE) {
       // Optional integrations fail closed at their own endpoints. They do
