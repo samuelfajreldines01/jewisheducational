@@ -11,7 +11,7 @@ const HEADER_ALIASES = {
   title: ['titulo', 'título', 'title', 'nome', 'name'],
   description: ['descricao', 'descrição', 'description', 'resumo'],
   content_description: ['descricao_conteudo', 'descrição_conteudo', 'conteudo', 'conteúdo', 'content', 'content_description'],
-  category: ['category', 'category', 'assunto'],
+  category: ['category', 'categoria', 'assunto'],
   grade_level: ['serie', 'série', 'ano', 'grade', 'grade_level', 'nivel', 'nível'],
   material_type: ['tipo', 'tipo_material', 'type', 'material_type'],
   keywords: ['palavras_chave', 'palavras-chave', 'palavras chave', 'keywords', 'tags'],
